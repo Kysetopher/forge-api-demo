@@ -2,16 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { projectControlRequest } from "@/lib/project-control-server";
 
 type RouteContext = {
-  params: {
+  params: Promise<{
     path: string[];
-  };
+  }>;
 };
 
 async function proxyRequest(request: NextRequest, { params }: RouteContext) {
   try {
+    const resolvedParams = await params;
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
     const { response: upstreamResponse, responseContentType, responseText } = await projectControlRequest(
-      params.path,
+      resolvedParams.path,
       {
         method: request.method,
         body,
