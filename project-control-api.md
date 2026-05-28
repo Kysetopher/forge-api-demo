@@ -22,7 +22,7 @@ All project-control API requests are relative to that deployment:
 ## Communication Rules
 
 - Send `Content-Type: application/json` for JSON writes.
-- Read `success` before assuming a request worked.
+- Read `success` on mutation endpoints before assuming a request worked.
 - Treat all mutation endpoints as JSON request/response endpoints.
 - Use `project.metadata.blueprint.blocks` as the canonical homepage block array.
 - Use `block.id` as the template selector and `instanceId` as the stable block instance identifier.
@@ -102,7 +102,7 @@ Project creation happens outside this deployed API surface. This document covers
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `id` | string | yes | Template/component selector. |
-| `instanceId` | string | no | Stable placed-block identifier. Generated if omitted on add. |
+| `instanceId` | string | no | Stable placed-block identifier. |
 | `variant` | string \| null | no | Block variant. |
 | `splashId` | string \| null | no | Background/splash asset key. |
 | `bgImage` | string \| null | no | Background image URL or local path. |
@@ -165,7 +165,7 @@ Parameters:
 
 Important:
 
-- the homepage blocks are at `project.metadata.blueprint.blocks`
+- the homepage blocks live at `project.metadata.blueprint.blocks`
 - the response includes `gitStatus` when the local project exists
 
 Response:
@@ -194,7 +194,7 @@ Response example:
 
 ### `PATCH /api/projects/:slug`
 
-Updates the stored blueprint.
+Updates `project.metadata.blueprint` for the stored project.
 
 Parameters:
 
@@ -240,6 +240,7 @@ Behavior:
 
 - merges the provided blueprint into the stored project
 - reassembles the local homepage when a local project exists
+- if local reassembly fails, the stored blueprint update may already have been applied
 
 ### `POST /api/projects/:slug/push`
 
@@ -250,10 +251,6 @@ Parameters:
 | Name | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
 | `slug` | path | string | yes | Project slug. |
-
-Body:
-
-- none
 
 Response:
 
@@ -278,10 +275,6 @@ Parameters:
 | Name | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
 | `slug` | path | string | yes | Project slug. |
-
-Body:
-
-- none
 
 Response:
 
@@ -334,12 +327,9 @@ Parameters:
 | --- | --- | --- | --- | --- |
 | `slug` | path | string | yes | Project slug. |
 
-Body:
-
-- none
-
 Response:
 
+- This status endpoint returns runtime fields directly.
 - `isRunning: boolean`
 - `url: string \| null`
 - `port: number \| null`
@@ -657,5 +647,5 @@ This is an example of a stored homepage blueprint the external service can read 
 
 - `id` selects the template/component.
 - `instanceId` identifies the placed block instance.
-- For a full-page rewrite, send the whole `blocks` array back in the `blueprint`.
+- For a full-page rewrite, send the whole `blocks` array back in `blueprint`.
 - For partial edits, update only the relevant block objects before PATCHing.
