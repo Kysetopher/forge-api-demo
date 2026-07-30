@@ -3,16 +3,16 @@ import { projectControlRequest } from "@/lib/project-control-server";
 
 type RouteContext = {
   params: Promise<{
-    path: string[];
+    slug: string;
   }>;
 };
 
-async function proxyRequest(request: NextRequest, { params }: RouteContext) {
+async function proxyRemoteSnapshot(request: NextRequest, { params }: RouteContext) {
   try {
     const resolvedParams = await params;
     const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.text();
     const { response: upstreamResponse, responseContentType, responseText } = await projectControlRequest(
-      resolvedParams.path,
+      ["remote", "projects", resolvedParams.slug],
       {
         method: request.method,
         body,
@@ -35,7 +35,7 @@ async function proxyRequest(request: NextRequest, { params }: RouteContext) {
         return NextResponse.json(
           {
             success: false,
-            error: responseText || "Project control proxy returned invalid JSON."
+            error: responseText || "Remote project snapshot proxy returned invalid JSON."
           },
           {
             status: upstreamResponse.status
@@ -52,7 +52,7 @@ async function proxyRequest(request: NextRequest, { params }: RouteContext) {
       }
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Project control proxy request failed.";
+    const message = error instanceof Error ? error.message : "Remote project snapshot proxy request failed.";
 
     return NextResponse.json(
       {
@@ -67,5 +67,9 @@ async function proxyRequest(request: NextRequest, { params }: RouteContext) {
 }
 
 export function GET(request: NextRequest, context: RouteContext) {
-  return proxyRequest(request, context);
+  return proxyRemoteSnapshot(request, context);
+}
+
+export function PATCH(request: NextRequest, context: RouteContext) {
+  return proxyRemoteSnapshot(request, context);
 }

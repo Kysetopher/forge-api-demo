@@ -12,17 +12,25 @@ All project-control API requests are relative to that deployment:
 
 - `/api/projects`
 - `/api/projects/:slug`
+- `/api/remote/projects/:slug`
 - `/api/projects/:slug/push`
+- `/api/projects/:slug/pull`
 - `/api/projects/:slug/deploy`
 - `/api/projects/:slug/run`
 - `/api/projects/:slug/blocks/add`
 - `/api/projects/:slug/blocks/:instanceId`
 - `/api/projects/:slug/blocks/replace`
+- `/api/remote/projects/:slug/push`
+- `/api/remote/projects/:slug/pull`
+- `/api/remote/projects/:slug/deploy`
+- `/api/remote/projects/:slug/blocks/add`
+- `/api/remote/projects/:slug/blocks/:instanceId`
+- `/api/remote/projects/:slug/blocks/replace`
 
 ## Communication Rules
 
 - Send `Content-Type: application/json` for JSON writes.
-- Read `success` on mutation endpoints before assuming a request worked.
+- Read `success` before assuming a request worked.
 - Treat all mutation endpoints as JSON request/response endpoints.
 - Use `project.metadata.blueprint.blocks` as the canonical homepage block array.
 - Use `block.id` as the template selector and `instanceId` as the stable block instance identifier.
@@ -47,6 +55,23 @@ x-api-key: your-secret-key
 
 Project creation happens outside this deployed API surface. This document covers the control-plane endpoints that read, mutate, push, deploy, run, and edit existing projects.
 
+Project identity is GitHub-first:
+
+- if the repository exists in the org, the project exists
+- each repo carries its own committed manifest for durable metadata
+- local-only repos are allowed during failed syncs, but they are treated as unsynced until they are pushed
+
+Remote repository mutation is now split onto `/api/remote/*`:
+
+- use `/api/remote/projects/:slug/*` when the caller should write directly to GitHub without needing a local checkout
+- use `/api/projects/:slug/*` when the caller is operating on the desktop-local project workspace
+
+Remote reads also live on the GitHub-backed surface:
+
+- use `GET /api/remote/projects/:slug` to fetch the committed remote snapshot and page structure
+- the snapshot exposes `pageStructure` derived from `project.metadata.blueprint.blocks`
+- remote reads must not depend on `project.localPath`
+
 ### Existing project edit
 
 1. Call `GET /api/projects/:slug`.
@@ -54,8 +79,9 @@ Project creation happens outside this deployed API surface. This document covers
 3. Update the relevant block(s).
 4. Call `PATCH /api/projects/:slug`.
 5. Call `POST /api/projects/:slug/push`.
-6. Call `POST /api/projects/:slug/deploy`.
-7. Use the dedicated block endpoints when you want a narrower mutation surface.
+6. Call `POST /api/projects/:slug/pull` when you need to clone a GitHub-only project locally.
+7. Call `POST /api/projects/:slug/deploy`.
+8. Use the dedicated block endpoints when you want a narrower mutation surface.
 
 ## Schema Reference
 
@@ -72,7 +98,7 @@ Project creation happens outside this deployed API surface. This document covers
 | `updatedAt` | string | yes | ISO timestamp. |
 | `githubUrl` | string | no | GitHub repo URL when available. |
 | `deploymentUrl` | string | no | Latest deployment URL when available. |
-| `metadata` | object | yes | Open-ended project metadata. |
+| `metadata` | object | yes | Open-ended project metadata, including the GitHub sync state and committed manifest payload. |
 
 ### `Project.metadata`
 
@@ -88,7 +114,18 @@ Project creation happens outside this deployed API surface. This document covers
 | `vercelDeploymentState` | string | no | Latest deployment state. |
 | `vercelDeploymentErrorMessage` | string \| null | no | Latest Vercel deployment error. |
 | `vercelDeploymentErrorCode` | string \| null | no | Latest Vercel deployment error code. |
+| `github.syncState` | string | no | `synced` when the project repo exists on GitHub, `local-only` when the local repo has not been pushed yet. |
+| `storage.state` | string | no | `local-only`, `github-only`, or `local-and-github` depending on whether the project is cloned locally, exists on GitHub, or both. |
+| `storage.hasLocalCopy` | boolean | no | True when the local checkout exists on disk. |
+| `storage.hasGithubCopy` | boolean | no | True when the GitHub repository exists. |
 | any other key | any | no | Metadata is intentionally open-ended. |
+
+### `Remote project snapshot`
+
+| Field | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `project` | object | yes | GitHub-backed project snapshot. `localPath` is optional in this response shape. |
+| `pageStructure` | array of `Block` | yes | Derived from `project.metadata.blueprint.blocks`. |
 
 ### `Blueprint`
 
@@ -102,7 +139,7 @@ Project creation happens outside this deployed API surface. This document covers
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
 | `id` | string | yes | Template/component selector. |
-| `instanceId` | string | no | Stable placed-block identifier. |
+| `instanceId` | string | no | Stable placed-block identifier. Generated if omitted on add. |
 | `variant` | string \| null | no | Block variant. |
 | `splashId` | string \| null | no | Background/splash asset key. |
 | `bgImage` | string \| null | no | Background image URL or local path. |
@@ -165,7 +202,7 @@ Parameters:
 
 Important:
 
-- the homepage blocks live at `project.metadata.blueprint.blocks`
+- the homepage blocks are at `project.metadata.blueprint.blocks`
 - the response includes `gitStatus` when the local project exists
 
 Response:
@@ -192,9 +229,88 @@ Response example:
 }
 ```
 
+### `GET /api/remote/projects/:slug`
+
+Returns the GitHub-backed project snapshot and page structure.
+
+Parameters:
+
+| Name | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `slug` | path | string | yes | Project slug. |
+
+Important:
+
+- `pageStructure` is the structured homepage block array returned by the remote service
+- the response must work even when the project has never been cloned locally
+- `project.localPath` may be omitted in the remote snapshot
+- `storage` describes whether the project exists locally, on GitHub, or both
+
+Response:
+
+- `success: true`
+- `project: Remote project snapshot`
+- `pageStructure: Block[]`
+- `storage: { state: string; hasLocalCopy: boolean; hasGithubCopy: boolean }`
+
+Response example:
+
+```json
+{
+  "success": true,
+  "project": {
+    "id": "project-id",
+    "name": "Northstar Systems",
+    "slug": "northstar-systems",
+    "status": "live",
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-02T00:00:00.000Z",
+    "metadata": {
+      "blueprint": {
+        "blocks": []
+      }
+    }
+  },
+  "pageStructure": [],
+  "storage": {
+    "state": "github-only",
+    "hasLocalCopy": false,
+    "hasGithubCopy": true
+  }
+}
+```
+### `PATCH /api/remote/projects/:slug`
+
+Updates the remote GitHub-backed project snapshot.
+
+Parameters:
+
+| Name | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `slug` | path | string | yes | Project slug. |
+
+Body:
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `pageStructure` | array of `Block` | yes | The normalized homepage block array to persist. |
+| `blueprint` | object | no | Optional compatibility wrapper; `blueprint.blocks` may be used by the service. |
+
+Response:
+
+- `success: true`
+- `project: Remote project snapshot`
+- `pageStructure: Block[]`
+- `storage: { state: string; hasLocalCopy: boolean; hasGithubCopy: boolean }`
+
+Behavior:
+
+- persists the edited page structure back to the remote service
+- keeps the remote snapshot normalized for later reads
+- should preserve unrelated metadata on the project snapshot
 ### `PATCH /api/projects/:slug`
 
-Updates `project.metadata.blueprint` for the stored project.
+Updates the stored blueprint.
 
 Parameters:
 
@@ -240,7 +356,6 @@ Behavior:
 
 - merges the provided blueprint into the stored project
 - reassembles the local homepage when a local project exists
-- if local reassembly fails, the stored blueprint update may already have been applied
 
 ### `POST /api/projects/:slug/push`
 
@@ -251,6 +366,10 @@ Parameters:
 | Name | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
 | `slug` | path | string | yes | Project slug. |
+
+Body:
+
+- none
 
 Response:
 
@@ -266,15 +385,101 @@ Behavior:
 - pushes local changes only
 - does not deploy
 
-### `POST /api/projects/:slug/deploy`
+### `POST /api/projects/:slug/pull`
 
-Triggers a Vercel deployment for the project.
+Pulls a GitHub-backed project into the local workspace when the repo is not already cloned.
 
 Parameters:
 
 | Name | In | Type | Required | Notes |
 | --- | --- | --- | --- | --- |
 | `slug` | path | string | yes | Project slug. |
+
+Body:
+
+| Name | Type | Required | Notes |
+| --- | --- | --- | --- |
+| `branch` | string | no | Branch to clone. Defaults to the repo default branch or `main`. |
+
+Response:
+
+- `success: true`
+- `alreadyLocal: boolean`
+- `localPath: string`
+- `branch: string`
+- `project: Project`
+
+Behavior:
+
+- checks whether the local checkout already exists
+- clones the GitHub repo into `/projects/:slug` when needed
+- updates storage metadata to `local-and-github`
+- does not deploy
+
+### `POST /api/remote/projects/:slug/push`
+
+Synchronizes the repository contents directly to GitHub from the stored project metadata.
+
+Parameters:
+
+| Name | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `slug` | path | string | yes | Project slug. |
+
+Body:
+
+- none
+
+Response:
+
+- `success: true`
+- `project: Project`
+
+Behavior:
+
+- writes the current manifest back to GitHub
+- regenerates the homepage files from the stored blueprint
+- does not depend on a local checkout
+
+### `POST /api/remote/projects/:slug/pull`
+
+Refreshes the project snapshot from GitHub-backed metadata without cloning locally.
+
+Parameters:
+
+| Name | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `slug` | path | string | yes | Project slug. |
+
+Body:
+
+- none
+
+Response:
+
+- `success: true`
+- `alreadyLocal: false`
+- `project: Project`
+
+Behavior:
+
+- invalidates the in-memory registry cache
+- reloads the project snapshot from GitHub-backed storage
+- does not create a local checkout
+
+### `POST /api/remote/projects/:slug/deploy`
+
+Triggers a Vercel deployment from the GitHub-backed repository state.
+
+Parameters:
+
+| Name | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `slug` | path | string | yes | Project slug. |
+
+Body:
+
+- none
 
 Response:
 
@@ -286,7 +491,84 @@ Response:
 Behavior:
 
 - ensures the Vercel project exists
-- triggers a deployment
+- triggers a GitHub-backed deployment
+- updates deployment metadata in the registry snapshot
+
+### `POST /api/remote/projects/:slug/blocks/add`
+
+Adds a homepage block and commits the updated repository files directly.
+
+Body:
+
+- `block` or `blocks[0]`
+- optional `index` or `position`
+
+Behavior:
+
+- inserts the normalized block into the stored blueprint
+- regenerates `src/app/page.tsx` and the used block component files
+- writes the updated manifest to GitHub
+
+### `POST /api/remote/projects/:slug/blocks/replace`
+
+Replaces a block by `instanceId` and writes the updated repository files directly.
+
+Behavior:
+
+- finds the target `instanceId`
+- replaces the block payload in the stored blueprint
+- regenerates `src/app/page.tsx` and the used block component files
+- writes the updated manifest to GitHub
+
+### `PATCH /api/remote/projects/:slug/blocks/:instanceId`
+
+Updates a block in place and writes the updated repository files directly.
+
+Body:
+
+- `block` or `updates`
+
+Behavior:
+
+- keeps `instanceId` stable
+- merges block changes into the stored blueprint
+- regenerates the remote homepage files
+
+### `DELETE /api/remote/projects/:slug/blocks/:instanceId`
+
+Deletes a block from the stored blueprint and writes the updated repository files directly.
+
+Behavior:
+
+- removes the block from the blueprint
+- regenerates the remote homepage files
+- writes the updated manifest to GitHub
+
+### `POST /api/projects/:slug/deploy`
+
+Triggers a Vercel deployment for the project.
+
+Parameters:
+
+| Name | In | Type | Required | Notes |
+| --- | --- | --- | --- | --- |
+| `slug` | path | string | yes | Project slug. |
+
+Body:
+
+- none
+
+Response:
+
+- `success: true`
+- `deploymentUrl: string`
+- `projectUrl: string`
+- `projectStatus: string`
+
+Behavior:
+
+- ensures the Vercel project exists
+- triggers a GitHub-backed Vercel deployment using the repo source metadata
 - updates the project registry with deployment state
 
 ### `POST /api/projects/:slug/run`
@@ -327,9 +609,12 @@ Parameters:
 | --- | --- | --- | --- | --- |
 | `slug` | path | string | yes | Project slug. |
 
+Body:
+
+- none
+
 Response:
 
-- This status endpoint returns runtime fields directly.
 - `isRunning: boolean`
 - `url: string \| null`
 - `port: number \| null`
@@ -649,3 +934,5 @@ This is an example of a stored homepage blueprint the external service can read 
 - `instanceId` identifies the placed block instance.
 - For a full-page rewrite, send the whole `blocks` array back in `blueprint`.
 - For partial edits, update only the relevant block objects before PATCHing.
+
+

@@ -27,12 +27,11 @@ export function buildUpstreamProjectControlUrl(pathSegments: string[], searchPar
 
 export type ProjectControlRequestInit = Omit<RequestInit, "body"> & {
   body?: string;
+  searchParams?: URLSearchParams;
 };
 
 export async function projectControlRequest(pathSegments: string[], init: ProjectControlRequestInit = {}) {
-  const { body, headers, method = "GET", searchParams } = init as ProjectControlRequestInit & {
-    searchParams?: URLSearchParams;
-  };
+  const { body, headers, method = "GET", searchParams } = init;
   const upstreamUrl = buildUpstreamProjectControlUrl(pathSegments, searchParams);
   const requestHeaders = new Headers(headers);
 

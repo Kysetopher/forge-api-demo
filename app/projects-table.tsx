@@ -1,8 +1,216 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger, useAccordionItemOpen } from "@/components/ui/accordion";
+import { PageStructureEditor } from "@/components/ui/page-structure-editor";
 import { useGetProjectControlProjects } from "@/hooks/useGetProjectControlProjects";
-import type { ProjectControlProject } from "@/lib/project-control-types";
+import { useGetProjectControlRemoteProject } from "@/hooks/useGetProjectControlRemoteProject";
+import { usePatchProjectControlRemoteProject } from "@/hooks/usePatchProjectControlRemoteProject";
+import type { ProjectControlBlock, ProjectControlProject } from "@/lib/project-control-types";
+
+function ProjectStructurePanel({ slug }: { slug: string }) {
+  const open = useAccordionItemOpen();
+  const getRemoteProject = useGetProjectControlRemoteProject();
+  const patchRemoteProject = usePatchProjectControlRemoteProject();
+  const [draftStructure, setDraftStructure] = useState<ProjectControlBlock[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function loadPageStructure() {
+    setIsLoading(true);
+    setError(null);
+    setSaveError(null);
+
+    try {
+      const response = await getRemoteProject(slug);
+      setDraftStructure(response.pageStructure);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Failed to load page structure.");
+      setDraftStructure(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    let active = true;
+
+    async function run() {
+      setIsLoading(true);
+      setError(null);
+      setSaveError(null);
+
+      try {
+        const response = await getRemoteProject(slug);
+
+        if (!active) {
+          return;
+        }
+
+        setDraftStructure(response.pageStructure);
+      } catch (requestError) {
+        if (!active) {
+          return;
+        }
+
+        setError(requestError instanceof Error ? requestError.message : "Failed to load page structure.");
+        setDraftStructure(null);
+      } finally {
+        if (active) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    run();
+
+    return () => {
+      active = false;
+    };
+  }, [getRemoteProject, open, slug]);
+
+  async function handleSave() {
+    if (!draftStructure) {
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    setError(null);
+
+    try {
+      const response = await patchRemoteProject(slug, draftStructure);
+      setDraftStructure(response.pageStructure);
+    } catch (requestError) {
+      setSaveError(requestError instanceof Error ? requestError.message : "Failed to save page structure.");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleRefresh() {
+    await loadPageStructure();
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">Page Structure</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            {isLoading
+              ? "Loading structure..."
+              : draftStructure
+                ? `${draftStructure.length} block${draftStructure.length === 1 ? "" : "s"}`
+                : "Ready to load"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleRefresh}
+            disabled={isLoading || isSaving}
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isLoading || isSaving || !draftStructure}
+            className="rounded-full border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-medium text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isSaving ? "Saving..." : "Save changes"}
+          </button>
+        </div>
+      </div>
+
+      {error ? (
+        <div className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : null}
+
+      {saveError ? (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {saveError}
+        </div>
+      ) : null}
+
+      {isLoading ? (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+          Fetching remote page structure...
+        </div>
+      ) : draftStructure ? (
+        <PageStructureEditor blocks={draftStructure} onChange={setDraftStructure} />
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
+          No blocks found in the remote page structure.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectAccordionSummary({ project }: { project: ProjectControlProject }) {
+  return (
+    <span className="ui-accordion-trigger-title">
+      <span className="ui-accordion-trigger-name">{project.name}</span>
+      <span className="ui-accordion-trigger-meta">
+        <span>Slug: {project.slug}</span>
+        <span>Status: {project.status}</span>
+        <span>Updated: {new Date(project.updatedAt).toLocaleString()}</span>
+      </span>
+    </span>
+  );
+}
+
+function ProjectAccordionItem({ project }: { project: ProjectControlProject }) {
+  return (
+    <AccordionItem value={project.slug}>
+      <AccordionTrigger>
+        <ProjectAccordionSummary project={project} />
+      </AccordionTrigger>
+      <AccordionContent>
+        <div className="mb-4 grid gap-3 text-xs text-slate-400 sm:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <p className="uppercase tracking-[0.18em] text-slate-500">Local Path</p>
+            <p className="mt-1 break-all text-slate-200">{project.localPath}</p>
+          </div>
+          <div>
+            <p className="uppercase tracking-[0.18em] text-slate-500">Deployment</p>
+            <p className="mt-1 text-slate-200">
+              {project.deploymentUrl ? (
+                <a
+                  className="text-sky-300 underline decoration-sky-300/40 underline-offset-4 hover:text-sky-200"
+                  href={project.deploymentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open deployment
+                </a>
+              ) : (
+                "No deployment URL"
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="uppercase tracking-[0.18em] text-slate-500">GitHub</p>
+            <p className="mt-1 break-all text-slate-200">{project.githubUrl || "No GitHub URL"}</p>
+          </div>
+        </div>
+
+        <ProjectStructurePanel slug={project.slug} />
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
 
 export function ProjectsTable() {
   const getProjects = useGetProjectControlProjects();
@@ -54,57 +262,25 @@ export function ProjectsTable() {
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur">
-        {error ? (
-          <div className="p-6 text-sm text-rose-200">{error}</div>
-        ) : isLoading ? (
-          <div className="p-6 text-sm text-slate-300">Loading projects...</div>
-        ) : projects.length === 0 ? (
-          <div className="p-6 text-sm text-slate-300">No projects found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-white/10 text-left text-sm text-slate-200">
-              <thead className="bg-white/5 text-xs uppercase tracking-[0.18em] text-slate-400">
-                <tr>
-                  <th className="px-5 py-4 font-medium">Name</th>
-                  <th className="px-5 py-4 font-medium">Slug</th>
-                  <th className="px-5 py-4 font-medium">Status</th>
-                  <th className="px-5 py-4 font-medium">Updated</th>
-                  <th className="px-5 py-4 font-medium">Local Path</th>
-                  <th className="px-5 py-4 font-medium">Deployment</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                {projects.map((project) => (
-                  <tr key={project.id} className="hover:bg-white/[0.03]">
-                    <td className="px-5 py-4 font-medium text-white">{project.name}</td>
-                    <td className="px-5 py-4 text-slate-300">{project.slug}</td>
-                    <td className="px-5 py-4 text-slate-300">{project.status}</td>
-                    <td className="px-5 py-4 text-slate-300">
-                      {new Date(project.updatedAt).toLocaleString()}
-                    </td>
-                    <td className="px-5 py-4 text-slate-300">{project.localPath}</td>
-                    <td className="px-5 py-4 text-slate-300">
-                      {project.deploymentUrl ? (
-                        <a
-                          className="text-sky-300 underline decoration-sky-300/40 underline-offset-4 hover:text-sky-200"
-                          href={project.deploymentUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open
-                        </a>
-                      ) : (
-                        "-"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {error ? (
+        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-6 text-sm text-rose-200">
+          {error}
+        </div>
+      ) : isLoading ? (
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300 shadow-2xl backdrop-blur">
+          Loading projects...
+        </div>
+      ) : projects.length === 0 ? (
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-sm text-slate-300 shadow-2xl backdrop-blur">
+          No projects found.
+        </div>
+      ) : (
+        <Accordion type="multiple" className="space-y-4">
+          {projects.map((project) => (
+            <ProjectAccordionItem key={project.id} project={project} />
+          ))}
+        </Accordion>
+      )}
     </section>
   );
 }

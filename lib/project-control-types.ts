@@ -32,11 +32,26 @@ export interface ProjectControlProject {
   [key: string]: unknown;
 }
 
+export type ProjectControlRemoteProject = Omit<ProjectControlProject, "localPath"> & {
+  localPath?: string;
+};
+
 export interface ProjectControlGitStatus {
   hasChanges: boolean;
   hasUnpushedCommits: boolean;
   details?: string;
   error?: string;
+}
+
+export interface ProjectControlRemoteProjectSnapshot extends ProjectControlJson {
+  project: ProjectControlRemoteProject;
+  pageStructure: ProjectControlBlock[];
+  storage?: {
+    state: string;
+    hasLocalCopy: boolean;
+    hasGithubCopy: boolean;
+    [key: string]: unknown;
+  };
 }
 
 export type ProjectControlSuccess<TData extends ProjectControlJson = ProjectControlJson> = {
@@ -47,6 +62,3 @@ export interface ProjectControlFailure {
   success: false;
   error: string;
 }
-
-export type ProjectControlMutationResponse<TData extends ProjectControlJson = ProjectControlJson> =
-  ProjectControlSuccess<TData>;

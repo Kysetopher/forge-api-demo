@@ -5,6 +5,11 @@
 :root {
   --background: #0b1020;
   --foreground: #e5eefc;
+  --collapsible-border: rgba(148, 163, 184, 0.2);
+  --collapsible-background: rgba(15, 23, 42, 0.72);
+  --collapsible-foreground: #e5eefc;
+  --collapsible-muted: #94a3b8;
+  --collapsible-ring: rgba(56, 189, 248, 0.5);
 }
 
 html {
@@ -25,3 +30,225 @@ body {
   box-sizing: border-box;
 }
 
+@layer components {
+  .ui-collapsible {
+    @apply rounded-xl border backdrop-blur-sm;
+    border-color: var(--collapsible-border);
+    background: var(--collapsible-background);
+    color: var(--collapsible-foreground);
+  }
+
+  .ui-collapsible-trigger {
+    @apply flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm font-medium transition-colors outline-none;
+    color: var(--collapsible-foreground);
+  }
+
+  .ui-collapsible-trigger:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .ui-collapsible-trigger:focus-visible {
+    box-shadow: 0 0 0 2px var(--collapsible-ring);
+  }
+
+  .ui-collapsible-trigger-icon {
+    @apply shrink-0 text-sm transition-transform duration-200 ease-out;
+    color: var(--collapsible-muted);
+  }
+
+  .ui-collapsible-trigger[data-state="open"] .ui-collapsible-trigger-icon {
+    transform: rotate(180deg);
+  }
+
+  .ui-collapsible-content {
+    @apply overflow-hidden px-4 pb-4 text-sm text-slate-200;
+    transition:
+      max-height 220ms ease,
+      opacity 180ms ease,
+      padding-top 180ms ease,
+      padding-bottom 180ms ease;
+  }
+
+  .ui-collapsible-content[data-state="open"] {
+    opacity: 1;
+    padding-top: 0;
+  }
+
+  .ui-collapsible-content[data-state="closed"] {
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .ui-page-structure-editor {
+    @apply space-y-4;
+  }
+
+  .ui-page-structure-editor-header {
+    @apply flex items-start justify-between gap-4;
+  }
+
+  .ui-page-structure-editor-title {
+    @apply text-sm font-semibold uppercase tracking-[0.18em] text-slate-400;
+  }
+
+  .ui-page-structure-editor-summary {
+    @apply mt-1 text-xs text-slate-500;
+  }
+
+  .ui-page-structure-editor-empty {
+    @apply rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300;
+  }
+
+  .ui-page-structure-editor-grid {
+    @apply grid gap-3;
+  }
+
+  .ui-page-structure-card {
+    @apply rounded-2xl border border-white/10 bg-slate-950/40 p-4;
+  }
+
+  .ui-page-structure-card-header {
+    @apply flex items-start justify-between gap-3;
+  }
+
+  .ui-page-structure-card-title {
+    @apply truncate text-sm font-semibold text-white;
+  }
+
+  .ui-page-structure-card-subtitle {
+    @apply mt-1 text-xs text-slate-400;
+  }
+
+  .ui-page-structure-card-index {
+    @apply rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] uppercase tracking-[0.18em] text-slate-300;
+  }
+
+  .ui-page-structure-fields {
+    @apply mt-4 grid gap-3;
+  }
+
+  .ui-page-structure-editable-heading {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-slate-500;
+  }
+
+  .ui-page-structure-field {
+    @apply grid gap-1;
+  }
+
+  .ui-page-structure-label {
+    @apply text-xs uppercase tracking-[0.16em] text-slate-500;
+  }
+
+  .ui-page-structure-readonly {
+    @apply rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-200;
+  }
+
+  .ui-page-structure-input,
+  .ui-page-structure-textarea {
+    @apply w-full rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-sky-400/70 focus:ring-2 focus:ring-sky-400/20;
+  }
+
+  .ui-page-structure-textarea {
+    @apply min-h-28 resize-y;
+  }
+
+  .ui-page-structure-json {
+    @apply mt-4 rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-xs text-slate-300;
+  }
+
+  .ui-page-structure-json summary {
+    @apply cursor-pointer select-none text-slate-400;
+  }
+
+  .ui-page-structure-json pre {
+    @apply mt-3 overflow-x-auto whitespace-pre-wrap break-words text-[11px] leading-5 text-slate-300;
+  }
+
+  .ui-accordion {
+    @apply w-full;
+  }
+
+  .ui-accordion-item {
+    @apply overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur;
+  }
+
+  .ui-accordion-item + .ui-accordion-item {
+    @apply mt-4;
+  }
+
+  .ui-accordion-trigger {
+    @apply flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm transition-colors outline-none;
+    color: var(--foreground);
+  }
+
+  .ui-accordion-trigger:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .ui-accordion-trigger:focus-visible {
+    box-shadow: 0 0 0 2px var(--collapsible-ring);
+  }
+
+  .ui-accordion-trigger-title {
+    @apply flex min-w-0 flex-col gap-1 text-left;
+  }
+
+  .ui-accordion-trigger-name {
+    @apply truncate text-base font-semibold text-white;
+  }
+
+  .ui-accordion-trigger-meta {
+    @apply flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400;
+  }
+
+  .ui-accordion-trigger-icon {
+    @apply shrink-0 text-sm text-slate-400 transition-transform duration-200 ease-out;
+  }
+
+  .ui-accordion-trigger[data-state="open"] .ui-accordion-trigger-icon {
+    transform: rotate(180deg);
+  }
+
+  .ui-accordion-content {
+    @apply overflow-hidden px-5 pb-5 text-sm text-slate-200;
+    transition:
+      max-height 220ms ease,
+      opacity 180ms ease,
+      padding-top 180ms ease,
+      padding-bottom 180ms ease;
+  }
+
+  .ui-accordion-content[data-state="open"] {
+    opacity: 1;
+    padding-top: 0;
+  }
+
+  .ui-accordion-content[data-state="closed"] {
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+}
+
+@keyframes ui-collapsible-open {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: var(--ui-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes ui-collapsible-close {
+  from {
+    max-height: var(--ui-collapsible-content-height);
+    opacity: 1;
+  }
+  to {
+    max-height: 0;
+    opacity: 0;
+  }
+}
